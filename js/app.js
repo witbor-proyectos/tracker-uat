@@ -227,7 +227,7 @@
 
           {/* ADMINISTRACIÓN (solo Witbor) */}
           {tab === "admin" && isWitbor && (
-            <AdminTab project={project} modules={modules} cases={cases} byModule={byModule} incidentDates={incidentDates}
+            <AdminTab project={project} modules={modules} cases={cases} byModule={byModule} incidentDates={incidentDates} snapshots={snapshots}
               ciclo={ciclo} me={me} isAdmin={isAdmin} testMode={testMode} participants={participants}
               onProjectSaved={setProject} onImported={() => loadAll(true)} onOpenModule={openModule} />
           )}

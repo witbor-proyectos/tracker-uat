@@ -5,7 +5,7 @@
    Aquí NO va nada de ningún cliente: un proyecto nuevo se crea por
    configuración en la base (sql/nuevo_proyecto.sql), sin tocar código.
    Publica en window.UAT: BRAND, SUPABASE_URL, SUPABASE_KEY,
-   ACCOUNT_DOMAIN, REDMINE_URL, APP_URL
+   ACCOUNT_DOMAIN, REDMINE_URL, APP_URL, SEMAFORO
    ============================================================ */
 (function () {
   /* ---------- Paleta de marca (Manual de marca Witbor 2026) ----------
@@ -52,5 +52,15 @@
      Vacía = la dirección desde la que se está usando. */
   const APP_URL = "";
 
-  window.UAT = Object.assign(window.UAT || {}, { BRAND, SUPABASE_URL, SUPABASE_KEY, ACCOUNT_DOMAIN, REDMINE_URL, APP_URL });
+  /* ---------- Semáforo por módulo (tablero y estatus por correo) ----------
+     Compara los casos aprobados con los previstos a la fecha:
+       aprobados / previstos >= verde  → verde
+       aprobados / previstos >= ambar  → ámbar
+       menos                           → rojo
+     Si el módulo todavía no tiene casos previstos, va en gris («sin iniciar»).
+     Valen para todos los proyectos. Para cambiarlos, editar estos dos números
+     (0.8 = 80%) y volver a publicar. */
+  const SEMAFORO = { verde: 0.8, ambar: 0.5 };
+
+  window.UAT = Object.assign(window.UAT || {}, { BRAND, SUPABASE_URL, SUPABASE_KEY, ACCOUNT_DOMAIN, REDMINE_URL, APP_URL, SEMAFORO });
 })();

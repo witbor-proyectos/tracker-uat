@@ -12,7 +12,7 @@
   const { Icon, I, BRAND, csvEscape, fmtDateTime, StatusEmail, ImportWizard } = window.UAT;
 
   function AdminTab({
-    project, modules, cases, byModule, incidentDates, ciclo, me, isAdmin, testMode, participants,
+    project, modules, cases, byModule, incidentDates, snapshots, ciclo, me, isAdmin, testMode, participants,
     onProjectSaved, onImported, onOpenModule,
   }) {
     /* ---------- Avisos: lo que Witbor tiene que revisar ---------- */
@@ -101,7 +101,7 @@
             )}
           </div>
         )}
-        <StatusEmail project={project} modules={modules} cases={cases} byModule={byModule} incidentDates={incidentDates}
+        <StatusEmail project={project} modules={modules} cases={cases} byModule={byModule} incidentDates={incidentDates} snapshots={snapshots}
           ciclo={ciclo} me={me} isAdmin={isAdmin} participants={participants} onProjectSaved={onProjectSaved} />
         {isAdmin ? (
           modules.length > 0 ? (

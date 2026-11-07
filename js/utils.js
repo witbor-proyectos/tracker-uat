@@ -1,25 +1,32 @@
 /* ============================================================
    utils.js — utilidades puras
-   Depende de window.UAT: ESTADO_ORDER, IMPORT_FIELDS
-   Publica en window.UAT: fmtDateTime, fmtDate, csvEscape, norm,
+   Depende de window.UAT: ESTADO_ORDER, IMPORT_FIELDS, SEMAFORO
+   Publica en window.UAT: fmtDateTime, fmtDate, fmtNum, csvEscape, norm,
    dayIn, addDays, isBusinessDay, businessDays, daysBetween, fmtDia,
-   fmtFechaAsunto, moduleStatus, openIncidents, incidentRows, businessDaysLeft,
+   fmtFechaAsunto, moduleStatus, plannedAt, plannedByModule, planFn, semaforo,
+   curvePoints, openIncidents, incidentRows, businessDaysLeft,
    store, stats, loadSheetJS, readWorkbook, detectHeaderRow, detectSheet,
    autoMap, buildImportRows
    ============================================================ */
 (function () {
-  const { ESTADO_ORDER, IMPORT_FIELDS } = window.UAT;
+  const { ESTADO_ORDER, IMPORT_FIELDS, SEMAFORO } = window.UAT;
 
+  /* Fechas en DD-mmm-AAAA (06-nov-2026), en la app y en el correo. */
   function fmtDateTime(iso) {
     if (!iso) return "";
     const d = new Date(iso);
-    return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) +
-      " · " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+    const dia = `${String(d.getDate()).padStart(2, "0")}-${MESES[d.getMonth()]}-${d.getFullYear()}`;
+    return dia + " · " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
   }
   function fmtDate(s) {
     if (!s) return "";
     const [y, m, d] = s.split("-");
-    return `${d}/${m}/${y}`;
+    return `${d}-${MESES[Number(m) - 1]}-${y}`;
+  }
+  /* Números con punto como separador de miles (1.234). */
+  function fmtNum(n) {
+    const s = String(Math.abs(Math.round(Number(n) || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return (n < 0 ? "−" : "") + s;
   }
   function csvEscape(v) {
     const s = String(v ?? "");
@@ -51,11 +58,8 @@
     return Math.round((new Date(to + "T00:00:00Z") - new Date(from + "T00:00:00Z")) / 86400000);
   }
   const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-  /* Fecha para el asunto del correo: 12-oct-2026. */
-  function fmtFechaAsunto(s) {
-    const [y, m, d] = s.split("-");
-    return `${d}-${MESES[Number(m) - 1]}-${y}`;
-  }
+  /* Fecha para el asunto del correo: 12-oct-2026 (mismo formato que fmtDate). */
+  function fmtFechaAsunto(s) { return fmtDate(s); }
   function fmtDia(s) {
     if (!s) return "";
     const [, m, d] = s.split("-");
@@ -107,21 +111,63 @@
      (sin «No aplica») repartido en partes iguales entre los días hábiles
      que van desde el inicio de sus pruebas hasta el cierre de la UAT,
      contando el día de inicio. Antes del inicio del módulo, 0. Se suman
-     los módulos. Ej.: 10 casos en 10 días hábiles → el día 2, 2 casos. */
-  function plannedAt(project, modules, byModule, fecha) {
+     los módulos. Ej.: 10 casos en 10 días hábiles → el día 2, 2 casos.
+     Cada módulo se redondea por su lado y el total es la suma de lo que
+     se muestra por módulo, para que los números siempre cuadren. */
+  function plannedByModule(project, modules, byModule, fecha) {
     const fin = project.fecha_fin_uat, feriados = project.feriados || [];
-    if (!fin) return 0;
-    let total = 0;
+    const out = {};
     modules.forEach((m) => {
+      out[m.id] = 0;
       const inicio = m.fecha_inicio_pruebas || project.fecha_inicio_uat;
-      if (!inicio || fecha < inicio) return;
+      if (!fin || !inicio || fecha < inicio) return;
       const base = stats(byModule[m.id] || []).base;
       const dias = businessDays(inicio, fin, feriados);
       if (!base || !dias) return;
       const hechos = businessDays(inicio, fecha < fin ? fecha : fin, feriados);
-      total += (base * hechos) / dias;
+      out[m.id] = Math.round((base * hechos) / dias);
     });
-    return Math.round(total);
+    return out;
+  }
+  function plannedAt(project, modules, byModule, fecha) {
+    const p = plannedByModule(project, modules, byModule, fecha);
+    return Object.keys(p).reduce((t, k) => t + p[k], 0);
+  }
+  /* Planificado por fecha con memoria (la curva lo pide para cada día). */
+  function planFn(project, modules, byModule) {
+    const memo = {};
+    return (fecha) => (memo[fecha] !== undefined ? memo[fecha] : (memo[fecha] = plannedAt(project, modules, byModule, fecha)));
+  }
+
+  /* Semáforo de un módulo: aprobados frente a previstos a la fecha.
+     Los umbrales están en config.js (SEMAFORO). Siempre lleva texto:
+     nunca se informa solo con color. */
+  function semaforo(aprobados, previstos) {
+    if (!previstos) return { id: "gris", label: "Sin iniciar", color: "#9CA3AF", bg: "#F3F4F6", ink: "#4B5563", emoji: "⚪" };
+    const r = aprobados / previstos;
+    const label = Math.round(r * 100) + "% del previsto";
+    if (r >= SEMAFORO.verde) return { id: "verde", label, color: "#16A34A", bg: "#DCFCE7", ink: "#166534", emoji: "🟢" };
+    if (r >= SEMAFORO.ambar) return { id: "ambar", label, color: "#D97706", bg: "#FEF3C7", ink: "#92400E", emoji: "🟡" };
+    return { id: "rojo", label, color: "#DC2626", bg: "#FEE2E2", ink: "#991B1B", emoji: "🔴" };
+  }
+
+  /* Puntos de la curva real vs. planificado: una foto por día (suma de
+     módulos, de daily_snapshots) y el día de hoy en vivo. Los usan el
+     tablero y el estatus por correo, así ambos muestran lo mismo. */
+  function curvePoints({ project, snapshots, general, today, plan }) {
+    const start = project.fecha_inicio_uat;
+    const byDay = {};
+    (snapshots || []).forEach((s) => {
+      const d = byDay[s.fecha] || (byDay[s.fecha] = { aprobado: 0, inc: 0 });
+      d.aprobado += s.aprobado; d.inc += s.con_incidente;
+    });
+    const pts = Object.keys(byDay).sort().filter((f) => f < today && (!start || f >= start)).map((fecha) => ({
+      fecha, aprobado: byDay[fecha].aprobado, ejecutados: byDay[fecha].aprobado + byDay[fecha].inc, planificado: plan(fecha),
+    }));
+    if (!start || today >= start) {
+      pts.push({ fecha: today, aprobado: general.by["Aprobado"], ejecutados: general.ejecutados, planificado: plan(today) });
+    }
+    return pts;
   }
 
   /* ---------- Estado de cada módulo (tablero y estatus por correo) ----------
@@ -346,8 +392,9 @@
   }
 
   window.UAT = Object.assign(window.UAT || {}, {
-    fmtDateTime, fmtDate, csvEscape, norm, store, stats,
-    dayIn, addDays, isBusinessDay, businessDays, daysBetween, fmtDia, fmtFechaAsunto, moduleStatus, plannedAt,
+    fmtDateTime, fmtDate, fmtNum, csvEscape, norm, store, stats,
+    dayIn, addDays, isBusinessDay, businessDays, daysBetween, fmtDia, fmtFechaAsunto, moduleStatus,
+    plannedAt, plannedByModule, planFn, semaforo, curvePoints,
     openIncidents, incidentRows, businessDaysLeft, ticketParts, redmineNewUrl,
     loadSheetJS, readWorkbook, detectHeaderRow, detectSheet, autoMap, buildImportRows,
   });
