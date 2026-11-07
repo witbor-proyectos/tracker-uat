@@ -124,9 +124,6 @@
       return { ...r, prev, falta: prev - r.st.by["Aprobado"], sem: semaforo(r.st.by["Aprobado"], prev) };
     }).sort((a, b) => b.falta - a.falta || (a.m.orden || 0) - (b.m.orden || 0));
 
-    const ultima = (r) => (r.last ? `${r.last.updated_by} · ${fmtDateTime(r.last.updated_at)}`
-      : !r.empezo ? (r.inicio ? `Empieza el ${fmtDate(r.inicio)}` : "—")
-      : r.inicio ? `Sin actualizaciones desde el inicio (${diaCorto(r.inicio)})` : "Sin actualizaciones");
 
     /* ----- HTML ----- */
     const F = "font-family:Arial,Helvetica,sans-serif;";
@@ -182,7 +179,16 @@
       `</tr></table>` +
       `<p style="${F}font-size:14px;color:${C.ink};margin:10px 0 0;">${esc(lectura)}</p>`;
 
-    // 2. Gráfico 1: previsto vs. real por módulo.
+    // 2. Gráfico 1: la curva del tablero, como imagen.
+    if (curva) {
+      html += `<p style="${h3}">Avance real vs. planificado</p>` +
+        `<img src="${curva.src}" width="600" alt="Curva de avance: ${fmtNum(plan)} previstos, ${fmtNum(g.ejecutados)} ejecutados, ${fmtNum(aprob)} aprobados" ` +
+        `style="display:block;width:100%;max-width:600px;height:auto;border:1px solid ${C.border};">` +
+        `<p style="${F}font-size:11px;color:${C.body};margin:6px 0 0;">En cantidad de casos. Al ${fmtDate(today)}: ${fmtNum(plan)} previstos · ` +
+        `${fmtNum(g.ejecutados)} ejecutados · ${fmtNum(aprob)} aprobados. El planificado reparte los casos de cada módulo en partes iguales entre los días hábiles desde su inicio hasta el cierre.</p>`;
+    }
+
+    // 3. Gráfico 2: previsto vs. real por módulo.
     html += `<p style="${h3}">Previsto vs. real por módulo</p>` +
       `<p style="${F}font-size:11px;color:${C.body};margin:0 0 8px;">` +
       `${muestra(C.previsto, C.previstoBorde)} Previsto a la fecha &nbsp; ${muestra(C.aprobado)} Aprobado &nbsp; ${muestra(C.incidente)} Con incidente &nbsp; ` +
@@ -203,44 +209,7 @@
           `<td style="${lbl}">${real}</td></tr></table></td></tr>`;
       }).join("") + `</table>`;
 
-    // 3. Gráfico 2: la curva del tablero, como imagen.
-    if (curva) {
-      html += `<p style="${h3}">Avance real vs. planificado</p>` +
-        `<img src="${curva.src}" width="600" alt="Curva de avance: ${fmtNum(plan)} previstos, ${fmtNum(g.ejecutados)} ejecutados, ${fmtNum(aprob)} aprobados" ` +
-        `style="display:block;width:100%;max-width:600px;height:auto;border:1px solid ${C.border};">` +
-        `<p style="${F}font-size:11px;color:${C.body};margin:6px 0 0;">En cantidad de casos. Al ${fmtDate(today)}: ${fmtNum(plan)} previstos · ` +
-        `${fmtNum(g.ejecutados)} ejecutados · ${fmtNum(aprob)} aprobados. El planificado reparte los casos de cada módulo en partes iguales entre los días hábiles desde su inicio hasta el cierre.</p>`;
-    }
-
-    // Status de avance en cantidad de casos (pedido de Matías, 23-oct).
-    const stCols = [
-      ["Total", g.base, ""], ["Ejecutados", g.ejecutados, g.ejecutado + "%"], ["Pendientes", g.porEjecutar, g.pct(g.porEjecutar) + "%"],
-      ["OK", aprob, g.avance + "%"], ["NO OK", g.by["Con incidente"], g.pct(g.by["Con incidente"]) + "%"], ["En proceso", g.by["En curso"], g.pct(g.by["En curso"]) + "%"],
-    ];
-    html += `<p style="${h3}">Status de avance</p>` + tabla(`border:1px solid ${C.border};`) + `<tr>` +
-      stCols.map(([l]) => `<th style="${th}text-align:center;">${esc(l)}</th>`).join("") + `</tr><tr>` +
-      stCols.map(([, v, p]) => `<td style="${td}text-align:center;"><span style="font-size:17px;color:${C.ink};font-weight:bold;">${fmtNum(v)}</span>` +
-        (p ? `<br><span style="font-size:11px;">${p}</span>` : "") + `</td>`).join("") + `</tr></table>`;
-
-    // 4. Tabla por módulo (referencia en números).
-    // El nombre del módulo va en su propia fila: así la tabla entra en el celular.
-    const td2 = `${td}border-bottom:none;padding-bottom:0;`;
-    html += `<p style="${h3}">Detalle por módulo</p>` + tabla(`border:1px solid ${C.border};`) +
-      `<tr><th style="${th}text-align:right;">Total</th><th style="${th}text-align:right;">Aprob.</th>` +
-      `<th style="${th}text-align:right;">Inc.</th><th style="${th}text-align:right;">En curso</th><th style="${th}text-align:right;">No inic.</th>` +
-      `<th style="${th}text-align:right;">Previsto</th><th style="${th}text-align:right;">Brecha</th><th style="${th}text-align:right;">% aprob.</th></tr>` +
-      rows.map((r) => {
-        const prev = planMod[r.m.id] || 0, br = r.st.by["Aprobado"] - prev;
-        return `<tr><td colspan="8" style="${td2}"><span style="color:${C.ink};font-weight:bold;">${esc(r.m.nombre)}</span>` +
-          ` <span style="font-size:11px;">· ${esc(r.m.responsable_nombre || "Sin responsable")} · ${esc(r.st.total === 0 ? "Sin casos cargados" : ultima(r))}</span></td></tr>` +
-          `<tr><td style="${td}${num}">${fmtNum(r.st.base)}</td><td style="${td}${num}">${fmtNum(r.st.by["Aprobado"])}</td>` +
-          `<td style="${td}${num}">${fmtNum(r.st.by["Con incidente"])}</td><td style="${td}${num}">${fmtNum(r.st.by["En curso"])}</td>` +
-          `<td style="${td}${num}">${fmtNum(r.st.by["No iniciado"])}</td><td style="${td}${num}">${fmtNum(prev)}</td>` +
-          `<td style="${td}${num}${br < 0 ? `color:${C.danger};` : ""}">${signo(br)}</td>` +
-          `<td style="${td}${num}color:${C.ink};font-weight:bold;">${r.st.avance}%</td></tr>`;
-      }).join("") + `</table>`;
-
-    // 5. Sin actualizar (el único lugar donde va el nombre de una persona).
+    // 4. Sin actualizar (el único lugar donde va el nombre de una persona).
     html += `<p style="${h3}">Sin actualizar en los últimos ${n} días hábiles</p>`;
     html += alertas.length
       ? tabla(`border:1px solid ${C.warnBorder};background:${C.warnBg};`) +
@@ -250,7 +219,7 @@
         `</table>`
       : `<p style="${F}font-size:13px;color:${C.body};margin:0;">Todos los módulos en pruebas se actualizaron en los últimos ${n} días hábiles.</p>`;
 
-    // 6. Incidentes abiertos.
+    // 5. Incidentes abiertos.
     html += `<p style="${h3}">Incidentes abiertos</p>`;
     html += incidentes.length
       ? tabla(`border:1px solid ${C.border};`) +
@@ -262,7 +231,7 @@
           `<td style="${td}${num}">${fmtNum(dias)}</td></tr>`).join("") + `</table>`
       : `<p style="${F}font-size:13px;color:${C.body};margin:0;">No hay incidentes abiertos.</p>`;
 
-    // 7. Enlace a la app y pie con la paleta Witbor.
+    // 6. Enlace a la app y pie con la paleta Witbor.
     html += tabla("margin:24px 0 0;") + `<tr><td>` +
       `<table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;"><tr><td style="background:${C.cta};border-radius:6px;padding:10px 18px;">` +
       `<a href="${esc(url)}" style="${F}font-size:14px;font-weight:bold;color:#FFFFFF;text-decoration:none;">Ver el detalle en el tracker</a>` +
@@ -290,11 +259,6 @@
     L.push("PREVISTO VS. REAL POR MÓDULO  (█ aprobados · ▒ previsto a la fecha · ░ resto)");
     porModulo.forEach((r) => L.push(`${(r.m.codigo || "").padEnd(ancho)}  ${barraTxt(r.st.by["Aprobado"], r.prev, r.st.base)}  ` +
       `Previsto ${fmtNum(r.prev)} · Aprobados ${fmtNum(r.st.by["Aprobado"])} · Ejecutado ${fmtNum(r.st.by["Aprobado"] + r.st.by["Con incidente"])}  ${r.sem.emoji} ${r.sem.label}`));
-    L.push("", "STATUS DE AVANCE", `Total ${fmtNum(g.base)} · Ejecutados ${fmtNum(g.ejecutados)} · Pendientes ${fmtNum(g.porEjecutar)} · OK ${fmtNum(aprob)} · NO OK ${fmtNum(g.by["Con incidente"])} · En proceso ${fmtNum(g.by["En curso"])}`, "");
-    L.push("DETALLE POR MÓDULO");
-    rows.forEach((r) => L.push(`- ${r.m.nombre} (${r.m.responsable_nombre || "sin responsable"}): ${r.st.avance}% aprobados · ` +
-      `${fmtNum(r.st.by["Aprobado"])} aprobados, ${fmtNum(r.st.by["Con incidente"])} con incidente, ${fmtNum(r.st.by["En curso"])} en curso, ` +
-      `${fmtNum(r.st.by["No iniciado"])} no iniciados de ${fmtNum(r.st.base)} · previsto ${fmtNum(planMod[r.m.id] || 0)} · ${r.st.total === 0 ? "Sin casos cargados" : ultima(r)}`));
     L.push("", `SIN ACTUALIZAR EN LOS ÚLTIMOS ${n} DÍAS HÁBILES`);
     if (alertas.length) alertas.forEach((r) => L.push(`- ${r.m.responsable_nombre || "Sin responsable"} — ${r.m.nombre} — ${r.sinActualizar} días hábiles` +
       (r.last ? "" : ` (sin actualizaciones desde el inicio, ${diaCorto(r.inicio)})`)));
